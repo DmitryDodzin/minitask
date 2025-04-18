@@ -134,16 +134,33 @@ mod tests {
     let task_1 = tasks.register(1, TestTask);
     smol::spawn(async move { task_1.send(123).await }).detach();
 
-    let task_2 = tasks.register(3, TestTask);
-    smol::spawn(async move {
-      let _ = task_2.send(321).await;
-      task_2.send(321).await
-    })
-    .detach();
+    let task_2 = tasks.register(2, TestTask);
+    smol::spawn(async move { task_2.send(321).await }).detach();
 
     smol::block_on(async move {
-      while let Some((id, message)) = tasks.next().await {
-        println!("{id}: {message:?}");
+      let mut got_message_task_1 = false;
+      let mut got_message_task_2 = false;
+
+      while let Some((id, update)) = tasks.next().await {
+        match (id, update) {
+          (1, TaskUpdate::Message(message)) => {
+            assert_eq!(message, "I got 123");
+            got_message_task_1 = true;
+          }
+          (1, TaskUpdate::Finished(result)) => {
+            assert!(got_message_task_1);
+            assert!(result.is_ok())
+          }
+          (2, TaskUpdate::Message(message)) => {
+            assert_eq!(message, "I got 321");
+            got_message_task_2 = true;
+          }
+          (2, TaskUpdate::Finished(result)) => {
+            assert!(got_message_task_2);
+            assert!(result.is_ok())
+          }
+          (id, update) => panic!("unexpected message: ({id}, {update:?})"),
+        }
       }
     });
   }
