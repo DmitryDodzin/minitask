@@ -259,7 +259,6 @@ name = "minitask"
 version = "0.1.0"
 dependencies = [
  "async-channel",
- "async-task",
  "fastrand",
  "futures-core",
  "pin-project-lite",

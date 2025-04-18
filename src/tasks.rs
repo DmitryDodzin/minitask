@@ -6,7 +6,6 @@ use core::{
 use std::collections::VecDeque;
 
 use async_channel::{Receiver, Sender};
-use async_task::Task;
 use futures_core::{Stream, ready};
 use pin_project_lite::pin_project;
 
@@ -16,18 +15,18 @@ pin_project! {
   /// Map to register [`BackgroundTask`] and [`Stream`] the [`TaskUpdate`]s form said tasks.
   ///
   /// Note: it will also try and drain any remaining messages on channel to yield them before `TaskUpdate::Finished`.
-  pub struct BackgroundTasks<K, MessageOut, Error> {
+  pub struct BackgroundTasks<K, MessageOut, Error, Task> {
     #[pin]
     streams: StreamMap<K, Pin<Box<Receiver<MessageOut>>>>,
 
     #[pin]
-    handles: FuturesMap<K, Task<Result<(), Error>>>,
+    handles: FuturesMap<K, Task>,
 
     task_drain_queue: VecDeque<(K, TaskUpdate<MessageOut, Error>)>,
   }
 }
 
-impl<K, MessageOut, Error> BackgroundTasks<K, MessageOut, Error> {
+impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task> {
   pub fn new() -> Self {
     BackgroundTasks {
       streams: StreamMap::new(),
@@ -49,7 +48,7 @@ impl<K, MessageOut, Error> BackgroundTasks<K, MessageOut, Error> {
   pub fn register<T>(&mut self, key: K, task: T) -> TaskSender<T>
   where
     K: Clone + PartialEq,
-    T: BackgroundTask<Error = Error, MessageOut = MessageOut>,
+    T: BackgroundTask<Error = Error, MessageOut = MessageOut, Task = Task>,
   {
     let (in_tx, in_rx) = async_channel::unbounded::<T::MessageIn>();
     let (out_tx, out_rx) = async_channel::unbounded::<T::MessageOut>();
@@ -62,9 +61,10 @@ impl<K, MessageOut, Error> BackgroundTasks<K, MessageOut, Error> {
   }
 }
 
-impl<K, MessageOut, Error> BackgroundTasks<K, MessageOut, Error>
+impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task>
 where
   K: Clone + PartialEq,
+  Task: Future<Output = Result<(), Error>> + Unpin,
 {
   fn poll_next_drain_queue(
     self: Pin<&mut Self>,
@@ -119,9 +119,10 @@ where
   }
 }
 
-impl<K, MessageOut, Error> Stream for BackgroundTasks<K, MessageOut, Error>
+impl<K, MessageOut, Error, Task> Stream for BackgroundTasks<K, MessageOut, Error, Task>
 where
   K: Clone + PartialEq,
+  Task: Future<Output = Result<(), Error>> + Unpin,
 {
   type Item = (K, TaskUpdate<MessageOut, Error>);
 

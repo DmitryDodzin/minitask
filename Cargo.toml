@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 async-channel = "2"
-async-task = "4"
 fastrand = "2"
 futures-core = "0.3"
 pin-project-lite = "0.2"

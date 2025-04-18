@@ -12,15 +12,13 @@
 //! struct PingPongTask;
 //!
 //! impl BackgroundTask for PingPongTask {
+//!   type Task = smol::Task<Result<(), Self::Error>>;
 //!   type Error = async_channel::SendError<Pong>;
 //!
 //!   type MessageIn = Ping;
 //!   type MessageOut = Pong;
 //!
-//!   fn run(
-//!     self,
-//!     message_bus: MessageBus<Self::MessageIn, Self::MessageOut>,
-//!   ) -> smol::Task<Result<(), Self::Error>> {
+//!   fn run(self, message_bus: MessageBus<Self::MessageIn, Self::MessageOut>) -> Self::Task {
 //!     smol::spawn(async move {
 //!       while let Ok(message) = message_bus.recv().await {
 //!         message_bus.send(Pong).await?;
@@ -55,7 +53,6 @@
 #![deny(unused_crate_dependencies)]
 
 use async_channel::{Receiver, Sender};
-use async_task::Task;
 
 mod future;
 mod stream;
@@ -64,6 +61,7 @@ mod tasks;
 pub use tasks::{BackgroundTasks, TaskSender, TaskUpdate};
 
 pub trait BackgroundTask {
+  type Task: Future<Output = Result<(), Self::Error>>;
   type Error;
 
   /// Incoming message type
@@ -73,10 +71,7 @@ pub trait BackgroundTask {
   type MessageOut;
 
   /// Start the task with the provided [`MessageBus`]
-  fn run(
-    self,
-    message_bus: MessageBus<Self::MessageIn, Self::MessageOut>,
-  ) -> Task<Result<(), Self::Error>>;
+  fn run(self, message_bus: MessageBus<Self::MessageIn, Self::MessageOut>) -> Self::Task;
 }
 
 /// Combined [`Receiver`] and [`Sender`] for inbound and outbound messages respectivly.
@@ -117,15 +112,13 @@ mod tests {
   struct TestTask;
 
   impl BackgroundTask for TestTask {
+    type Task = smol::Task<Result<(), Self::Error>>;
     type Error = async_channel::SendError<String>;
 
     type MessageIn = u32;
     type MessageOut = String;
 
-    fn run(
-      self,
-      message_bus: MessageBus<Self::MessageIn, Self::MessageOut>,
-    ) -> Task<Result<(), Self::Error>> {
+    fn run(self, message_bus: MessageBus<Self::MessageIn, Self::MessageOut>) -> Self::Task {
       smol::spawn(async move {
         while let Ok(message) = message_bus.recv().await {
           message_bus.send(format!("I got {message}")).await?;
