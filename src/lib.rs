@@ -1,6 +1,6 @@
 //! # Minitask
 //!
-//! Small wrapper for spawning and observing [`BackgroundTask`]s with a "messaging" interface,
+//! Small wrapper for spawning and observing async [`BackgroundTask`]s with a "messaging" interface,
 //! ```rust
 //! use minitask::{BackgroundTask, BackgroundTasks, MessageBus, TaskUpdate};
 //! use smol::stream::StreamExt;
@@ -79,6 +79,7 @@ pub trait BackgroundTask {
   ) -> Task<Result<(), Self::Error>>;
 }
 
+/// Combined [`Receiver`] and [`Sender`] for inbound and outbound messages respectivly.
 #[derive(Clone)]
 pub struct MessageBus<MessageIn, MessageOut> {
   tx: Sender<MessageOut>,
@@ -86,8 +87,15 @@ pub struct MessageBus<MessageIn, MessageOut> {
 }
 
 impl<MessageIn, MessageOut> MessageBus<MessageIn, MessageOut> {
-  fn new(tx: Sender<MessageOut>, rx: Receiver<MessageIn>) -> Self {
+  /// Create new bus from sender and reciver
+  fn from_parts(tx: Sender<MessageOut>, rx: Receiver<MessageIn>) -> Self {
     MessageBus { tx, rx }
+  }
+
+  /// Split the bus to it's parts
+  pub fn split(self) -> (Sender<MessageOut>, Receiver<MessageIn>) {
+    let MessageBus { tx, rx } = self;
+    (tx, rx)
   }
 
   pub fn send(&self, message: MessageOut) -> async_channel::Send<'_, MessageOut> {

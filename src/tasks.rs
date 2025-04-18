@@ -13,6 +13,9 @@ use pin_project_lite::pin_project;
 use crate::{BackgroundTask, MessageBus, future::FuturesMap, stream::StreamMap};
 
 pin_project! {
+  /// Map to register [`BackgroundTask`] and [`Stream`] the [`TaskUpdate`]s form said tasks.
+  ///
+  /// Note: it will also try and drain any remaining messages on channel to yield them before `TaskUpdate::Finished`.
   pub struct BackgroundTasks<K, MessageOut, Error> {
     #[pin]
     streams: StreamMap<K, Pin<Box<Receiver<MessageOut>>>>,
@@ -51,7 +54,7 @@ impl<K, MessageOut, Error> BackgroundTasks<K, MessageOut, Error> {
     let (in_tx, in_rx) = async_channel::unbounded::<T::MessageIn>();
     let (out_tx, out_rx) = async_channel::unbounded::<T::MessageOut>();
 
-    let message_bus = MessageBus::new(out_tx, in_rx);
+    let message_bus = MessageBus::from_parts(out_tx, in_rx);
     self.streams.insert(key.clone(), Box::pin(out_rx));
     self.handles.insert(key, task.run(message_bus));
 
@@ -149,12 +152,16 @@ where
   }
 }
 
+/// Update message from [`BackgroundTasks`]
 #[derive(Debug)]
 pub enum TaskUpdate<MessageOut, Error> {
+  /// Task sent a message via [`MessageBus`]
   Message(MessageOut),
+  /// Task exited
   Finished(Result<(), Error>),
 }
 
+/// [`Sender`] for task's inbound messages.
 #[derive(Clone, Debug)]
 pub struct TaskSender<T: BackgroundTask>(Sender<T::MessageIn>);
 
