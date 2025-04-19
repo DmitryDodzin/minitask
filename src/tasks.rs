@@ -119,6 +119,12 @@ where
   }
 }
 
+impl<K, MessageOut, Error, Task> Default for BackgroundTasks<K, MessageOut, Error, Task> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl<K, MessageOut, Error, Task> Stream for BackgroundTasks<K, MessageOut, Error, Task>
 where
   K: Clone + PartialEq,
