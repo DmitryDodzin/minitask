@@ -51,6 +51,9 @@
 
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
+#![no_std]
+
+extern crate alloc;
 
 use async_channel::{Receiver, Sender};
 
@@ -104,6 +107,8 @@ impl<MessageIn, MessageOut> MessageBus<MessageIn, MessageOut> {
 
 #[cfg(test)]
 mod tests {
+
+  use alloc::{format, string::String};
 
   use smol::stream::StreamExt;
 

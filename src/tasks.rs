@@ -1,9 +1,9 @@
+use alloc::{boxed::Box, collections::VecDeque};
 use core::{
   ops::{ControlFlow, Deref, DerefMut},
   pin::Pin,
   task::{Context, Poll},
 };
-use std::collections::VecDeque;
 
 use async_channel::{Receiver, Sender};
 use futures_core::{Stream, ready};

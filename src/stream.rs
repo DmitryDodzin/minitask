@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::{
   pin::Pin,
   task::{Context, Poll},
@@ -116,7 +117,7 @@ where
 #[cfg(test)]
 mod tests {
 
-  use std::collections::BTreeMap;
+  use alloc::{boxed::Box, collections::BTreeMap};
 
   use smol::stream::StreamExt;
 
