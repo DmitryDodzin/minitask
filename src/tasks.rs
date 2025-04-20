@@ -43,8 +43,13 @@ impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task> {
     }
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.streams.is_empty() && self.handles.is_empty()
+  }
+
   /// Register new [`BackgroundTask`] with a specific key, this key is used to sync up the message
   /// bus channels and started task.
+  #[must_use]
   pub fn register<T>(&mut self, key: K, task: T) -> TaskSender<T>
   where
     K: Clone + PartialEq,
@@ -145,7 +150,9 @@ where
           ControlFlow::Break(_) => {}
         }
 
-        break self.as_mut().poll_next_message(cx);
+        if let result @ Poll::Ready(Some(_)) = self.as_mut().poll_next_message(cx) {
+          break result;
+        }
       } else {
         if let result @ Poll::Ready(Some(_)) = self.as_mut().poll_next_message(cx) {
           break result;

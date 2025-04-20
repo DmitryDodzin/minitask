@@ -26,6 +26,10 @@ impl<K, V> StreamMap<K, V> {
     }
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.entries.is_empty()
+  }
+
   pub fn insert(&mut self, key: K, value: V) {
     self.entries.push((key, value))
   }
