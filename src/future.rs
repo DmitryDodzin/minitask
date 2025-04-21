@@ -30,7 +30,19 @@ impl<K, V> FuturesMap<K, V> {
     self.entries.is_empty()
   }
 
-  pub fn insert(&mut self, key: K, value: V) {
+  pub fn contains<Q>(&mut self, key: &Q) -> bool
+  where
+    Q: PartialEq<K>,
+  {
+    self.entries.iter().any(|(k, _)| key == k)
+  }
+
+  pub fn insert(&mut self, key: K, value: V)
+  where
+    K: PartialEq,
+  {
+    assert!(!self.contains(&key));
+
     self.entries.push((key, value))
   }
 }
@@ -71,11 +83,33 @@ where
       }
     }
 
-    // If the map is empty, then the stream is complete.
     if this.entries.is_empty() {
       Poll::Ready(None)
     } else {
       Poll::Pending
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+
+  use alloc::collections::BTreeMap;
+
+  use smol::{future, stream::StreamExt};
+
+  use super::*;
+
+  #[test]
+  fn basic_futures_map() {
+    let mut futures = FuturesMap::default();
+
+    futures.insert(1, future::ready(123));
+    futures.insert(3, future::ready(321));
+
+    assert_eq!(
+      smol::block_on(futures.collect::<BTreeMap<_, _>>()),
+      BTreeMap::from([(1, 123), (3, 321)])
+    );
   }
 }

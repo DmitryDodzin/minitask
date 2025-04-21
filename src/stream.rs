@@ -30,7 +30,19 @@ impl<K, V> StreamMap<K, V> {
     self.entries.is_empty()
   }
 
-  pub fn insert(&mut self, key: K, value: V) {
+  pub fn contains<Q>(&mut self, key: &Q) -> bool
+  where
+    Q: PartialEq<K>,
+  {
+    self.entries.iter().any(|(k, _)| key == k)
+  }
+
+  pub fn insert(&mut self, key: K, value: V)
+  where
+    K: PartialEq,
+  {
+    assert!(!self.contains(&key));
+
     self.entries.push((key, value))
   }
 
@@ -61,21 +73,18 @@ where
     let mut idx = start;
 
     for _ in 0..this.entries.len() {
+      assert!(idx < this.entries.len());
+
       let (_, stream) = &mut this.entries[idx];
 
       match Pin::new(stream).poll_next(cx) {
         Poll::Ready(Some(val)) => return Poll::Ready(Some((idx, val))),
         Poll::Ready(None) => {
-          // Remove the entry
           this.entries.swap_remove(idx);
 
-          // Check if this was the last entry, if so the cursor needs
-          // to wrap
           if idx == this.entries.len() {
             idx = 0;
           } else if idx < start && start <= this.entries.len() {
-            // The stream being swapped into the current index has
-            // already been polled, so skip it.
             idx = idx.wrapping_add(1) % this.entries.len();
           }
         }
@@ -85,7 +94,6 @@ where
       }
     }
 
-    // If the map is empty, then the stream is complete.
     if this.entries.is_empty() {
       Poll::Ready(None)
     } else {

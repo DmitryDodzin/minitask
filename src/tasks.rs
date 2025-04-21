@@ -1,5 +1,6 @@
 use alloc::{boxed::Box, collections::VecDeque};
 use core::{
+  any::TypeId,
   ops::{ControlFlow, Deref, DerefMut},
   pin::Pin,
   task::{Context, Poll},
@@ -15,18 +16,18 @@ pin_project! {
   /// Map to register [`BackgroundTask`] and [`Stream`] the [`TaskUpdate`]s form said tasks.
   ///
   /// Note: it will also try and drain any remaining messages on channel to yield them before `TaskUpdate::Finished`.
-  pub struct BackgroundTasks<K, MessageOut, Error, Task> {
+  pub struct BackgroundTasks<K, MessageOut, Output, Task> {
     #[pin]
     streams: StreamMap<K, Pin<Box<Receiver<MessageOut>>>>,
 
     #[pin]
     handles: FuturesMap<K, Task>,
 
-    task_drain_queue: VecDeque<(K, TaskUpdate<MessageOut, Error>)>,
+    task_drain_queue: VecDeque<(K, TaskUpdate<MessageOut, Output>)>,
   }
 }
 
-impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task> {
+impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task> {
   pub fn new() -> Self {
     BackgroundTasks {
       streams: StreamMap::new(),
@@ -47,13 +48,20 @@ impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task> {
     self.streams.is_empty() && self.handles.is_empty()
   }
 
+  pub fn contains<Q>(&mut self, key: &Q) -> bool
+  where
+    Q: PartialEq<K>,
+  {
+    self.streams.contains(key) || self.handles.contains(key)
+  }
+
   /// Register new [`BackgroundTask`] with a specific key, this key is used to sync up the message
   /// bus channels and started task.
   #[must_use]
   pub fn register<T>(&mut self, key: K, task: T) -> TaskSender<T>
   where
     K: Clone + PartialEq,
-    T: BackgroundTask<Error = Error, MessageOut = MessageOut, Task = Task>,
+    T: BackgroundTask<MessageOut = MessageOut, Task = Task>,
   {
     let (in_tx, in_rx) = async_channel::unbounded::<T::MessageIn>();
     let (out_tx, out_rx) = async_channel::unbounded::<T::MessageOut>();
@@ -66,14 +74,30 @@ impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task> {
   }
 }
 
-impl<K, MessageOut, Error, Task> BackgroundTasks<K, MessageOut, Error, Task>
+impl<MessageOut, Output, Task> BackgroundTasks<TypeId, MessageOut, Output, Task> {
+  pub fn contains_typed<T>(&mut self) -> bool
+  where
+    T: BackgroundTask<MessageOut = MessageOut, Task = Task> + 'static,
+  {
+    self.contains(&TypeId::of::<T>())
+  }
+
+  pub fn register_typed<T>(&mut self, task: T) -> TaskSender<T>
+  where
+    T: BackgroundTask<MessageOut = MessageOut, Task = Task> + 'static,
+  {
+    self.register(TypeId::of::<T>(), task)
+  }
+}
+
+impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task>
 where
   K: Clone + PartialEq,
-  Task: Future<Output = Result<(), Error>> + Unpin,
+  Task: Future<Output = Output> + Unpin,
 {
   fn poll_next_drain_queue(
     self: Pin<&mut Self>,
-  ) -> ControlFlow<Poll<Option<(K, TaskUpdate<MessageOut, Error>)>>> {
+  ) -> ControlFlow<Poll<Option<(K, TaskUpdate<MessageOut, Output>)>>> {
     if let result @ Some(_) = self.project().task_drain_queue.pop_front() {
       ControlFlow::Break(Poll::Ready(result))
     } else {
@@ -84,7 +108,7 @@ where
   fn poll_next_message(
     self: Pin<&mut Self>,
     cx: &mut Context<'_>,
-  ) -> Poll<Option<(K, TaskUpdate<MessageOut, Error>)>> {
+  ) -> Poll<Option<(K, TaskUpdate<MessageOut, Output>)>> {
     let next = ready!(self.project().streams.poll_next(cx));
     Poll::Ready(next.map(|(key, message)| (key, TaskUpdate::Message(message))))
   }
@@ -92,7 +116,7 @@ where
   fn poll_next_handle(
     self: Pin<&mut Self>,
     cx: &mut Context<'_>,
-  ) -> ControlFlow<Poll<Option<(K, TaskUpdate<MessageOut, Error>)>>> {
+  ) -> ControlFlow<Poll<Option<(K, TaskUpdate<MessageOut, Output>)>>> {
     let mut this = self.project();
 
     match this.handles.poll_next(cx) {
@@ -124,18 +148,18 @@ where
   }
 }
 
-impl<K, MessageOut, Error, Task> Default for BackgroundTasks<K, MessageOut, Error, Task> {
+impl<K, MessageOut, Output, Task> Default for BackgroundTasks<K, MessageOut, Output, Task> {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl<K, MessageOut, Error, Task> Stream for BackgroundTasks<K, MessageOut, Error, Task>
+impl<K, MessageOut, Output, Task> Stream for BackgroundTasks<K, MessageOut, Output, Task>
 where
   K: Clone + PartialEq,
-  Task: Future<Output = Result<(), Error>> + Unpin,
+  Task: Future<Output = Output> + Unpin,
 {
-  type Item = (K, TaskUpdate<MessageOut, Error>);
+  type Item = (K, TaskUpdate<MessageOut, Output>);
 
   fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     loop {
@@ -168,11 +192,11 @@ where
 
 /// Update message from [`BackgroundTasks`]
 #[derive(Debug)]
-pub enum TaskUpdate<MessageOut, Error> {
+pub enum TaskUpdate<MessageOut, Output> {
   /// Task sent a message via [`MessageBus`]
   Message(MessageOut),
   /// Task exited
-  Finished(Result<(), Error>),
+  Finished(Output),
 }
 
 /// [`Sender`] for task's inbound messages.
