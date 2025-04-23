@@ -2,6 +2,11 @@
 name = "minitask"
 version = "0.1.0"
 edition = "2024"
+authors = ["@dmitrydodzin"]
+license = "MIT"
+description = "MiniTask a simple wrapper for async tasks"
+repository = "https://github.com/DmitryDodzin/minitask"
+keywords = ["futures", "task"]
 
 [dependencies]
 async-channel = { version = "2", default-features = false }
