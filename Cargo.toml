@@ -8,11 +8,19 @@ description = "MiniTask a simple wrapper for async tasks"
 repository = "https://github.com/DmitryDodzin/minitask"
 keywords = ["futures", "task"]
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 async-channel = { version = "2", default-features = false }
-fastrand = "2"
-futures-core = "0.3"
+fastrand = { version = "2", default-features = false }
+futures-core = { version = "0.3", default-features = false }
 pin-project-lite = "0.2"
 
 [dev-dependencies]
 smol = "2"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

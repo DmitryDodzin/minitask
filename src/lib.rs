@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
@@ -104,7 +104,7 @@ mod tests {
 
   #[test]
   fn basic_tasks() {
-    let mut tasks = BackgroundTasks::with_capacity(2);
+    let mut tasks = BackgroundTasks::with_capacity(Default::default(), 2);
 
     let task_1 = tasks.register(1, TestTask);
     smol::spawn(async move { task_1.send(123).await }).detach();
@@ -146,7 +146,7 @@ mod tests {
   #[test]
   fn register_typed_task() {
     let mut tasks: tasks::BackgroundTasks<_, _, Result<(), async_channel::SendError<String>>, _> =
-      BackgroundTasks::with_capacity(1);
+      BackgroundTasks::with_capacity(Default::default(), 1);
 
     let task_1 = tasks.register_typed(TestTask);
     smol::spawn(async move { task_1.send(123).await }).detach();
@@ -171,7 +171,7 @@ mod tests {
   #[test]
   fn runtimeless_task() {
     let mut tasks: tasks::BackgroundTasks<_, _, Result<(), async_channel::SendError<String>>, _> =
-      BackgroundTasks::with_capacity(1);
+      BackgroundTasks::with_capacity(Default::default(), 1);
 
     let task_1 = tasks.register(1, Runtimeless);
     let _ = smol::block_on(async move { task_1.send(123).await });

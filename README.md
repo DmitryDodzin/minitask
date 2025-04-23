@@ -30,7 +30,7 @@ impl BackgroundTask for PingPongTask {
   }
 }
 
-let mut tasks = BackgroundTasks::new();
+let mut tasks = BackgroundTasks::default();
 
 let ping_pong = tasks.register("ping-pong", PingPongTask);
 

@@ -3,25 +3,29 @@ use core::{
   pin::Pin,
   task::{Context, Poll},
 };
+use fastrand::Rng;
 
 use futures_core::Stream;
 use pin_project_lite::pin_project;
 
 pin_project! {
   pub struct FuturesMap<K, V> {
+    rng: Rng,
     entries: Vec<(K, V)>,
   }
 }
 
 impl<K, V> FuturesMap<K, V> {
-  pub fn new() -> Self {
+  pub fn new(rng: Rng) -> Self {
     FuturesMap {
+      rng,
       entries: Vec::new(),
     }
   }
 
-  pub fn with_capacity(capacity: usize) -> Self {
+  pub fn with_capacity(rng: Rng, capacity: usize) -> Self {
     FuturesMap {
+      rng,
       entries: Vec::with_capacity(capacity),
     }
   }
@@ -47,9 +51,10 @@ impl<K, V> FuturesMap<K, V> {
   }
 }
 
+#[cfg(feature = "std")]
 impl<K, V> Default for FuturesMap<K, V> {
   fn default() -> Self {
-    Self::new()
+    Self::new(Rng::new())
   }
 }
 
@@ -66,7 +71,7 @@ where
       return Poll::Ready(None);
     }
 
-    let start = fastrand::usize(..this.entries.len());
+    let start = this.rng.usize(..this.entries.len());
     let mut idx = start;
 
     for _ in 0..this.entries.len() {
@@ -102,7 +107,7 @@ mod tests {
 
   #[test]
   fn basic_futures_map() {
-    let mut futures = FuturesMap::default();
+    let mut futures = FuturesMap::new(Rng::with_seed(1337));
 
     futures.insert(1, future::ready(123));
     futures.insert(3, future::ready(321));

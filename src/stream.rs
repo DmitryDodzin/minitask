@@ -3,25 +3,29 @@ use core::{
   pin::Pin,
   task::{Context, Poll},
 };
+use fastrand::Rng;
 
 use futures_core::{Stream, ready};
 use pin_project_lite::pin_project;
 
 pin_project! {
   pub struct StreamMap<K, V> {
+    rng: Rng,
     entries: Vec<(K, V)>,
   }
 }
 
 impl<K, V> StreamMap<K, V> {
-  pub fn new() -> Self {
+  pub fn new(rng: Rng) -> Self {
     StreamMap {
+      rng,
       entries: Vec::new(),
     }
   }
 
-  pub fn with_capacity(capacity: usize) -> Self {
+  pub fn with_capacity(rng: Rng, capacity: usize) -> Self {
     StreamMap {
+      rng,
       entries: Vec::with_capacity(capacity),
     }
   }
@@ -69,7 +73,7 @@ where
       return Poll::Ready(None);
     }
 
-    let start = fastrand::usize(..this.entries.len());
+    let start = this.rng.usize(..this.entries.len());
     let mut idx = start;
 
     for _ in 0..this.entries.len() {
@@ -102,9 +106,10 @@ where
   }
 }
 
+#[cfg(feature = "std")]
 impl<K, V> Default for StreamMap<K, V> {
   fn default() -> Self {
-    Self::new()
+    Self::new(Rng::new())
   }
 }
 
@@ -137,7 +142,7 @@ mod tests {
 
   #[test]
   fn basic_stream_map() {
-    let mut streams = StreamMap::default();
+    let mut streams = StreamMap::new(Rng::with_seed(1337));
 
     {
       let (tx, rx) = async_channel::bounded(1);

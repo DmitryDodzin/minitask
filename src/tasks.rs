@@ -5,6 +5,7 @@ use core::{
   pin::Pin,
   task::{Context, Poll},
 };
+use fastrand::Rng;
 
 use async_channel::{Receiver, Sender};
 use futures_core::{Stream, ready};
@@ -26,23 +27,26 @@ pin_project! {
     #[pin]
     handles: FuturesMap<K, Task>,
 
+    rng: Rng,
     task_drain_queue: VecDeque<(K, TaskUpdate<MessageOut, Output>)>,
   }
 }
 
 impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task> {
-  pub fn new() -> Self {
+  pub fn new(mut rng: Rng) -> Self {
     BackgroundTasks {
-      streams: StreamMap::new(),
-      handles: FuturesMap::new(),
+      streams: StreamMap::new(rng.fork()),
+      handles: FuturesMap::new(rng.fork()),
+      rng,
       task_drain_queue: VecDeque::new(),
     }
   }
 
-  pub fn with_capacity(capacity: usize) -> Self {
+  pub fn with_capacity(mut rng: Rng, capacity: usize) -> Self {
     BackgroundTasks {
-      streams: StreamMap::with_capacity(capacity),
-      handles: FuturesMap::with_capacity(capacity),
+      streams: StreamMap::with_capacity(rng.fork(), capacity),
+      handles: FuturesMap::with_capacity(rng.fork(), capacity),
+      rng,
       task_drain_queue: VecDeque::new(),
     }
   }
@@ -152,9 +156,10 @@ where
   }
 }
 
+#[cfg(feature = "std")]
 impl<K, MessageOut, Output, Task> Default for BackgroundTasks<K, MessageOut, Output, Task> {
   fn default() -> Self {
-    Self::new()
+    Self::new(Default::default())
   }
 }
 
@@ -171,7 +176,7 @@ where
         break result;
       }
 
-      if fastrand::bool() {
+      if self.rng.bool() {
         match self.as_mut().poll_next_handle(cx) {
           ControlFlow::Continue(()) => continue,
           ControlFlow::Break(result @ Poll::Ready(Some(_))) => break result,
