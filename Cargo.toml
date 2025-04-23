@@ -10,7 +10,9 @@ keywords = ["futures", "task"]
 
 [features]
 default = ["std"]
-std = []
+std = [
+	"fastrand/std"
+]
 
 [dependencies]
 async-channel = { version = "2", default-features = false }
