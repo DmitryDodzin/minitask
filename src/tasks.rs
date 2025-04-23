@@ -15,6 +15,9 @@ use crate::{BackgroundTask, MessageBus, future::FuturesMap, stream::StreamMap};
 pin_project! {
   /// Map to register [`BackgroundTask`] and [`Stream`] the [`TaskUpdate`]s form said tasks.
   ///
+  /// There are 2 primary metods of using BackgroundTasks is with [`BackgroundTasks::register`] or
+  /// [`BackgroundTasks::register_typed`] where the register_typed variant uses [`TypeId`] of backround task as key.
+  ///
   /// Note: it will also try and drain any remaining messages on channel to yield them before `TaskUpdate::Finished`.
   pub struct BackgroundTasks<K, MessageOut, Output, Task> {
     #[pin]
@@ -82,6 +85,7 @@ impl<MessageOut, Output, Task> BackgroundTasks<TypeId, MessageOut, Output, Task>
     self.contains(&TypeId::of::<T>())
   }
 
+  #[must_use]
   pub fn register_typed<T>(&mut self, task: T) -> TaskSender<T>
   where
     T: BackgroundTask<MessageOut = MessageOut, Task = Task> + 'static,
