@@ -1,6 +1,6 @@
 [package]
 name = "minitask"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["@dmitrydodzin"]
 license = "MIT"
@@ -8,21 +8,27 @@ description = "MiniTask a simple wrapper for async tasks"
 repository = "https://github.com/DmitryDodzin/minitask"
 keywords = ["futures", "task"]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = ["std"]
+alloc = [
+	"dep:fastrand",
+	"dep:futures-core",
+	"dep:pin-project-lite",
+]
 std = [
+	"alloc",
 	"fastrand/std"
 ]
 
 [dependencies]
 async-channel = { version = "2", default-features = false }
-fastrand = { version = "2", default-features = false }
-futures-core = { version = "0.3", default-features = false }
-pin-project-lite = "0.2"
+fastrand = { version = "2", default-features = false, optional = true }
+futures-core = { version = "0.3", default-features = false, optional = true }
+pin-project-lite = { version = "0.2", optional = true }
 
 [dev-dependencies]
 smol = "2"
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]

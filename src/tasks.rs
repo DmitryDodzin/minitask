@@ -20,7 +20,7 @@ pin_project! {
   /// [`BackgroundTasks::register_typed`] where the register_typed variant uses [`TypeId`] of backround task as key.
   ///
   /// Note: it will also try and drain any remaining messages on channel to yield them before `TaskUpdate::Finished`.
-  pub struct BackgroundTasks<K, MessageOut, Output, Task> {
+  pub struct BackgroundTasks<K, MessageOut, Task: Future> {
     #[pin]
     streams: StreamMap<K, Pin<Box<Receiver<MessageOut>>>>,
 
@@ -28,11 +28,15 @@ pin_project! {
     handles: FuturesMap<K, Task>,
 
     rng: Rng,
-    task_drain_queue: VecDeque<(K, TaskUpdate<MessageOut, Output>)>,
+    task_drain_queue: VecDeque<(K, TaskUpdate<MessageOut, Task::Output>)>,
   }
 }
 
-impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task> {
+impl<K, MessageOut, Task> BackgroundTasks<K, MessageOut, Task>
+where
+  Task: Future,
+{
+  /// Create new BackgroundTasks stream.
   pub fn new(mut rng: Rng) -> Self {
     BackgroundTasks {
       streams: StreamMap::new(rng.fork()),
@@ -42,6 +46,7 @@ impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task> {
     }
   }
 
+  /// Create new BackgroundTasks stream with specified task capacity.
   pub fn with_capacity(mut rng: Rng, capacity: usize) -> Self {
     BackgroundTasks {
       streams: StreamMap::with_capacity(rng.fork(), capacity),
@@ -51,10 +56,12 @@ impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task> {
     }
   }
 
+  /// Check if the task stream is empty
   pub fn is_empty(&self) -> bool {
     self.streams.is_empty() && self.handles.is_empty()
   }
 
+  /// Check if there is a task with the same key already registerd
   pub fn contains<Q>(&mut self, key: &Q) -> bool
   where
     Q: PartialEq<K>,
@@ -79,9 +86,31 @@ impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task> {
 
     TaskSender(in_tx)
   }
+
+  /// Same as [`BackgroundTasks::register`] but with a bounded capacity channels for background task,
+  /// each side of the channel will have the specifec capacity.
+  #[must_use]
+  pub fn register_bounded<T>(&mut self, key: K, task: T, capacity: usize) -> TaskSender<T>
+  where
+    K: Clone + PartialEq,
+    T: BackgroundTask<MessageOut = MessageOut, Task = Task>,
+  {
+    let (in_tx, in_rx) = async_channel::bounded::<T::MessageIn>(capacity);
+    let (out_tx, out_rx) = async_channel::bounded::<T::MessageOut>(capacity);
+
+    let message_bus = MessageBus::from_parts(out_tx, in_rx);
+    self.streams.insert(key.clone(), Box::pin(out_rx));
+    self.handles.insert(key, task.run(message_bus));
+
+    TaskSender(in_tx)
+  }
 }
 
-impl<MessageOut, Output, Task> BackgroundTasks<TypeId, MessageOut, Output, Task> {
+impl<MessageOut, Task> BackgroundTasks<TypeId, MessageOut, Task>
+where
+  Task: Future,
+{
+  /// Same as [`BackgroundTasks::contains`] but using task [`TypeId`] as key.
   pub fn contains_typed<T>(&mut self) -> bool
   where
     T: BackgroundTask<MessageOut = MessageOut, Task = Task> + 'static,
@@ -89,6 +118,7 @@ impl<MessageOut, Output, Task> BackgroundTasks<TypeId, MessageOut, Output, Task>
     self.contains(&TypeId::of::<T>())
   }
 
+  /// Same as [`BackgroundTasks::register`] but using task [`TypeId`] as key.
   #[must_use]
   pub fn register_typed<T>(&mut self, task: T) -> TaskSender<T>
   where
@@ -96,16 +126,27 @@ impl<MessageOut, Output, Task> BackgroundTasks<TypeId, MessageOut, Output, Task>
   {
     self.register(TypeId::of::<T>(), task)
   }
+
+  /// Same as [`BackgroundTasks::register_bounded`] but using task [`TypeId`] as key.
+  #[must_use]
+  pub fn register_bounded_typed<T>(&mut self, task: T, capacity: usize) -> TaskSender<T>
+  where
+    T: BackgroundTask<MessageOut = MessageOut, Task = Task> + 'static,
+  {
+    self.register_bounded(TypeId::of::<T>(), task, capacity)
+  }
 }
 
-impl<K, MessageOut, Output, Task> BackgroundTasks<K, MessageOut, Output, Task>
+type TaskUpdatePoll<K, MessageOut, Output> = Poll<Option<(K, TaskUpdate<MessageOut, Output>)>>;
+
+impl<K, MessageOut, Task> BackgroundTasks<K, MessageOut, Task>
 where
   K: Clone + PartialEq,
-  Task: Future<Output = Output> + Unpin,
+  Task: Future + Unpin,
 {
   fn poll_next_drain_queue(
     self: Pin<&mut Self>,
-  ) -> ControlFlow<Poll<Option<(K, TaskUpdate<MessageOut, Output>)>>> {
+  ) -> ControlFlow<TaskUpdatePoll<K, MessageOut, Task::Output>> {
     if let result @ Some(_) = self.project().task_drain_queue.pop_front() {
       ControlFlow::Break(Poll::Ready(result))
     } else {
@@ -116,7 +157,7 @@ where
   fn poll_next_message(
     self: Pin<&mut Self>,
     cx: &mut Context<'_>,
-  ) -> Poll<Option<(K, TaskUpdate<MessageOut, Output>)>> {
+  ) -> TaskUpdatePoll<K, MessageOut, Task::Output> {
     let next = ready!(self.project().streams.poll_next(cx));
     Poll::Ready(next.map(|(key, message)| (key, TaskUpdate::Message(message))))
   }
@@ -124,7 +165,7 @@ where
   fn poll_next_handle(
     self: Pin<&mut Self>,
     cx: &mut Context<'_>,
-  ) -> ControlFlow<Poll<Option<(K, TaskUpdate<MessageOut, Output>)>>> {
+  ) -> ControlFlow<TaskUpdatePoll<K, MessageOut, Task::Output>> {
     let mut this = self.project();
 
     match this.handles.poll_next(cx) {
@@ -157,18 +198,22 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<K, MessageOut, Output, Task> Default for BackgroundTasks<K, MessageOut, Output, Task> {
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl<K, MessageOut, Task> Default for BackgroundTasks<K, MessageOut, Task>
+where
+  Task: Future,
+{
   fn default() -> Self {
     Self::new(Default::default())
   }
 }
 
-impl<K, MessageOut, Output, Task> Stream for BackgroundTasks<K, MessageOut, Output, Task>
+impl<K, MessageOut, Task> Stream for BackgroundTasks<K, MessageOut, Task>
 where
   K: Clone + PartialEq,
-  Task: Future<Output = Output> + Unpin,
+  Task: Future + Unpin,
 {
-  type Item = (K, TaskUpdate<MessageOut, Output>);
+  type Item = (K, TaskUpdate<MessageOut, Task::Output>);
 
   fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     loop {

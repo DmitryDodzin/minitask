@@ -3,8 +3,8 @@ use core::{
   pin::Pin,
   task::{Context, Poll},
 };
-use fastrand::Rng;
 
+use fastrand::Rng;
 use futures_core::Stream;
 use pin_project_lite::pin_project;
 
@@ -52,6 +52,7 @@ impl<K, V> FuturesMap<K, V> {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<K, V> Default for FuturesMap<K, V> {
   fn default() -> Self {
     Self::new(Rng::new())
@@ -96,7 +97,7 @@ where
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod tests {
 
   use alloc::collections::BTreeMap;
