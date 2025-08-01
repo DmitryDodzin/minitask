@@ -10,14 +10,18 @@ keywords = ["futures", "task"]
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["std"]
 alloc = [
+	"dep:async-channel",
 	"dep:fastrand",
 	"dep:futures-core",
 	"dep:pin-project-lite",
+]
+portable-atomic = [
+	"dep:async-channel",
+	"async-channel/portable-atomic"
 ]
 std = [
 	"alloc",
@@ -25,7 +29,7 @@ std = [
 ]
 
 [dependencies]
-async-channel = { version = "2", default-features = false }
+async-channel = { version = "2.4", default-features = false, optional = true }
 fastrand = { version = "2", default-features = false, optional = true }
 futures-core = { version = "0.3", default-features = false, optional = true }
 pin-project-lite = { version = "0.2", optional = true }
