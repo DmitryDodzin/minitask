@@ -254,7 +254,7 @@ checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
 
 [[package]]
 name = "minitask"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-channel",
  "fastrand",
