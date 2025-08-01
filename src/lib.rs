@@ -1,80 +1,29 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
-#![forbid(unsafe_code)]
-#![warn(missing_docs, missing_debug_implementations, rust_2018_idioms)]
 #![deny(unused_crate_dependencies)]
 #![doc = include_str!("../README.md")]
+#![forbid(unsafe_code)]
+#![warn(missing_docs, missing_debug_implementations, rust_2018_idioms)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
-
-use core::fmt;
-
-use async_channel::{Receiver, Sender};
 
 #[cfg(feature = "alloc")]
 mod future;
 #[cfg(feature = "alloc")]
 mod stream;
+#[cfg(any(feature = "alloc", feature = "portable-atomic"))]
+mod task;
 #[cfg(feature = "alloc")]
 mod tasks;
 
+#[cfg(any(feature = "alloc", feature = "portable-atomic"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "alloc", feature = "portable-atomic"))))]
+pub use task::{BackgroundTask, MessageBus};
+
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use tasks::{BackgroundTasks, TaskSender, TaskUpdate};
-
-/// Main wrapper trait for starting and handling Tasks
-pub trait BackgroundTask {
-  /// The actual "Task" handle, this should something like `async_executer::Task` or `tokio::task::JoinHandle`
-  type Task: Future;
-
-  /// Incoming message type
-  type MessageIn;
-
-  /// Outgoing message type
-  type MessageOut;
-
-  /// Start the task with the provided [`MessageBus`]
-  fn run(self, message_bus: MessageBus<Self::MessageIn, Self::MessageOut>) -> Self::Task;
-}
-
-/// Combined [`Receiver`] and [`Sender`] for inbound and outbound messages respectivly.
-#[derive(Clone)]
-pub struct MessageBus<MessageIn, MessageOut> {
-  tx: Sender<MessageOut>,
-  rx: Receiver<MessageIn>,
-}
-
-impl<MessageIn, MessageOut> fmt::Debug for MessageBus<MessageIn, MessageOut> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.debug_struct("MessageBus")
-      .field("tx", &self.tx)
-      .field("rx", &self.rx)
-      .finish()
-  }
-}
-
-impl<MessageIn, MessageOut> MessageBus<MessageIn, MessageOut> {
-  /// Create new bus from sender and reciver
-  #[cfg(feature = "alloc")]
-  fn from_parts(tx: Sender<MessageOut>, rx: Receiver<MessageIn>) -> Self {
-    MessageBus { tx, rx }
-  }
-
-  /// Split the bus to it's parts
-  pub fn split(self) -> (Sender<MessageOut>, Receiver<MessageIn>) {
-    let MessageBus { tx, rx } = self;
-    (tx, rx)
-  }
-
-  /// Create [`Send`](async_channel::Send) future to send a message to bus.
-  pub fn send(&self, message: MessageOut) -> async_channel::Send<'_, MessageOut> {
-    self.tx.send(message)
-  }
-
-  /// Create [`Recv`](async_channel::Recv) future to consume a message from message bus.
-  pub fn recv(&self) -> async_channel::Recv<'_, MessageIn> {
-    self.rx.recv()
-  }
-}
 
 #[cfg(all(test, feature = "alloc"))]
 mod tests {
